@@ -31,19 +31,27 @@ end
 def terminal_script_new_tab(dir)
   return &lt;&lt;-APPLESCRIPT
   tell application "Terminal"
-  	activate
-  	tell application "System Events"
-  		repeat while "Terminal" is not name of (process 1 where frontmost is true)
-  			delay 0.1
-  		end repeat
-  		tell process "Terminal" to keystroke "t" using command down
-  	end tell
-  	do script "cd #{e_as(e_sh(dir))}; clear; pwd" in the last tab of window 1
+    activate
+    set numberOfTabs to count tabs in window 1
+    tell application "System Events"
+      repeat while "Terminal" is not name of (process 1 where frontmost is true)
+        delay 0.1
+      end repeat
+      tell process "Terminal" to keystroke "t" using command down
+    end tell
+    set startedAt to current date
+    repeat while (count tabs in window 1) is numberOfTabs
+      delay 0.1
+      if (current date) - startedAt > 2 then
+        error "Could not open new tab"
+      end if
+    end repeat
+    do script "cd #{e_as(e_sh(dir))}; clear; pwd" in the last tab of window 1
   end tell
 APPLESCRIPT
 end
 
-def iterm_script(dir)
+def iterm_legacy_script(dir)
   return &lt;&lt;-APPLESCRIPT
     tell application "iTerm"
       activate
@@ -63,10 +71,35 @@ def iterm_script(dir)
 APPLESCRIPT
 end
 
+def iterm_script(dir)
+  return &lt;&lt;-APPLESCRIPT
+    tell application "iTerm2"
+      activate
+      if exists the first window then
+        set aWindow to the first window
+      else
+        set aWindow to (create window with default profile)
+      end if
+      tell aWindow
+        set newTab to (create tab with default profile)
+        tell newTab
+          repeat with aSession in sessions
+            tell aSession
+              write text "cd #{e_as(e_sh(dir))}; clear; pwd"
+            end tell
+          end repeat
+        end tell
+      end tell
+    end tell
+APPLESCRIPT
+end
+
 if dir = find_directory
   script = nil
-  if ENV['TM_TERMINAL'] =~ /^iterm$/i || is_running('iTerm')
+  if ENV['TM_TERMINAL'] =~ /^iterm$/i || is_running('iTerm2')
     script = iterm_script(dir)
+  elsif is_running('iTerm')
+    script = iterm_legacy_script(dir)
   else
     script = ENV['TM_TERMINAL_USE_TABS'] ? terminal_script_new_tab(dir) : terminal_script_new_window(dir)
   end
